@@ -28,62 +28,38 @@ impl<T> SemverStore<T> {
         let minor = semver.get(1).unwrap();
         let patch = semver.get(2);
 
-        let major_node = self.tree.get_child(int(&major));
-
-        if major_node.is_none() {
-            return None;
-        }
-
         if let &"x" = minor {
-            let minor_node = major_node.unwrap().get_max_child();
-            if minor_node.is_none() {
-                return None;
-            }
-            match minor_node.unwrap().get_max_child() {
-                Some(patch_node) => {
-                    return patch_node.store.as_ref();
-                }
-                None => {
-                    return None;
-                }
-            }
-        }
-
-        let minor_node = major_node.unwrap().get_child(int(&minor));
-        if minor_node.is_none() {
-            return None;
+            return self
+                .tree
+                .get_child(int(&major))
+                .and_then(|major| major.get_max_child())
+                .and_then(|minor| minor.get_max_child())
+                .and_then(|patch| patch.store.as_ref());
         }
 
         if patch.is_none() {
-            match minor_node.unwrap().get_max_child() {
-                Some(patch_node) => {
-                    return patch_node.store.as_ref();
-                }
-                None => {
-                    return None;
-                }
-            }
+            return self
+                .tree
+                .get_child(int(&major))
+                .and_then(|major| major.get_child(int(&minor)))
+                .and_then(|minor| minor.get_max_child())
+                .and_then(|patch| patch.store.as_ref());
         }
 
         if let &"x" = patch.unwrap() {
-            match minor_node.unwrap().get_max_child() {
-                Some(patch_node) => {
-                    return patch_node.store.as_ref();
-                }
-                None => {
-                    return None;
-                }
-            }
+            return self
+                .tree
+                .get_child(int(&major))
+                .and_then(|major| major.get_child(int(&minor)))
+                .and_then(|minor| minor.get_max_child())
+                .and_then(|patch| patch.store.as_ref());
         }
 
-        match minor_node.unwrap().get_child(int(&patch.unwrap())) {
-            Some(patch_node) => {
-                return patch_node.store.as_ref();
-            }
-            None => {
-                return None;
-            }
-        }
+        self.tree
+            .get_child(int(&major))
+            .and_then(|major| major.get_child(int(&minor)))
+            .and_then(|minor| minor.get_child(int(&patch.unwrap())))
+            .and_then(|patch| patch.store.as_ref())
     }
 
     pub fn del(&mut self, version: String) -> bool {
@@ -104,9 +80,7 @@ impl<T> SemverStore<T> {
 
         if patch.is_none() {
             let major_node = self.tree.get_child(int(&major)).unwrap();
-            let removed = major_node.remove_child(int(&minor));
-
-            if removed == false {
+            if major_node.remove_child(int(&minor)) == false {
                 return false;
             }
 
@@ -123,9 +97,7 @@ impl<T> SemverStore<T> {
         // TODO: remove code duplication
         if let &"x" = patch {
             let major_node = self.tree.get_child(int(&major)).unwrap();
-            let removed = major_node.remove_child(int(&minor));
-
-            if removed == false {
+            if major_node.remove_child(int(&minor)) == false {
                 return false;
             }
 
@@ -137,20 +109,24 @@ impl<T> SemverStore<T> {
             return true;
         }
 
-        let minor_node = self
+        let removed = self
             .tree
             .get_child(int(&major))
-            .unwrap()
-            .get_child(int(&minor))
-            .unwrap();
+            .and_then(|major| major.get_child(int(&minor)))
+            .and_then(|minor| Some(minor.remove_child(int(&patch))));
 
-        let removed = minor_node.remove_child(int(&patch));
-        if removed == false {
+        if removed.is_none() {
             return false;
         }
 
         // if we removed the last child, we should
         // also remove the parent node
+        let minor_node = self
+            .tree
+            .get_child(int(&major))
+            .and_then(|major| major.get_child(int(&minor)))
+            .unwrap();
+
         if minor_node.children.len() == 0 {
             self.tree
                 .get_child(int(&major))
@@ -256,6 +232,10 @@ mod node_tests {
         assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 4);
         assert_eq!(store.del("1.2.0".to_string()), true);
         assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 3);
+        assert_eq!(store.del("2.2.0".to_string()), false);
+        assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 3);
+        assert_eq!(store.del("1.4.2".to_string()), false);
+        assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 3);
     }
 
     #[test]
@@ -274,6 +254,10 @@ mod node_tests {
         assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 2);
         assert_eq!(store.del("1.2".to_string()), true);
         assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 1);
+        assert_eq!(store.del("1.3".to_string()), false);
+        assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 1);
+        assert_eq!(store.del("1.3.x".to_string()), false);
+        assert_eq!(store.tree.children.get(&1).unwrap().children.len(), 1);
     }
 
     #[test]
@@ -290,6 +274,8 @@ mod node_tests {
         assert_eq!(store.del("1.x".to_string()), true);
         assert_eq!(store.tree.children.len(), 2);
         assert_eq!(store.del("2.x".to_string()), true);
+        assert_eq!(store.tree.children.len(), 1);
+        assert_eq!(store.del("4.x".to_string()), false);
         assert_eq!(store.tree.children.len(), 1);
     }
 
