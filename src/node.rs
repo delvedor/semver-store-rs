@@ -44,7 +44,7 @@ impl<T> Node<T> {
 }
 
 #[cfg(test)]
-mod semver_store_tests {
+mod node_tests {
     use super::Node;
 
     #[test]
@@ -95,13 +95,8 @@ mod semver_store_tests {
             None => panic!("Should have a value"),
         }
         assert_eq!(root.children.len(), 1);
-
-        root.remove_child(2);
-
-        match root.get_child(2) {
-            Some(_c) => panic!("Should be empty"),
-            None => assert!(true),
-        }
+        let removed_node = root.remove_child(2).unwrap();
+        assert_eq!(removed_node.store, Some(10));
         assert_eq!(root.children.len(), 0);
     }
 
