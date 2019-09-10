@@ -11,7 +11,7 @@ impl<T> SemverStore<T> {
         }
     }
 
-    pub fn set(&mut self, version: String, store: T) {
+    pub fn insert(&mut self, version: &String, store: T) {
         let semver: Vec<&str> = version.split('.').collect();
         let mut current_node = &mut self.tree;
         for v in semver {
@@ -22,7 +22,7 @@ impl<T> SemverStore<T> {
         current_node.set_store(store);
     }
 
-    pub fn get(&mut self, version: String) -> Option<&T> {
+    pub fn get(&mut self, version: &String) -> Option<&T> {
         let semver: Vec<&str> = version.split('.').collect();
         let major = semver.get(0).unwrap();
         let minor = semver.get(1).unwrap();
@@ -62,7 +62,14 @@ impl<T> SemverStore<T> {
             .and_then(|patch| patch.store.as_ref())
     }
 
-    pub fn del(&mut self, version: String) -> bool {
+    pub fn contains_key(&mut self, version: &String) -> bool {
+        match self.get(version) {
+            Some(_v) => true,
+            None => false,
+        }
+    }
+
+    pub fn remove(&mut self, version: &String) -> Option<T> {
         let semver: Vec<&str> = version.split('.').collect();
         let major = semver.get(0).unwrap();
         let minor = semver.get(1).unwrap();
