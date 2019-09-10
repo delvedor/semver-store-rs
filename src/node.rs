@@ -34,11 +34,8 @@ impl<T> Node<T> {
         }
     }
 
-    pub fn remove_child(&mut self, prefix: u32) -> bool {
-        match self.children.remove(&prefix) {
-            Some(_node) => true,
-            None => false,
-        }
+    pub fn remove_child(&mut self, prefix: u32) -> Option<Node<T>> {
+        self.children.remove(&prefix)
     }
 
     pub fn set_store(&mut self, store: T) {
