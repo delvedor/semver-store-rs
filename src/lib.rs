@@ -70,83 +70,98 @@ impl<T> SemverStore<T> {
     }
 
     pub fn remove(&mut self, version: &String) -> Option<T> {
+        if self.contains_key(&version) == false {
+            return None;
+        }
+
         let semver: Vec<&str> = version.split('.').collect();
         let major = semver.get(0).unwrap();
         let minor = semver.get(1).unwrap();
         let patch = semver.get(2);
 
-        let major_node = self.tree.get_child(int(&major));
+        let major_node = self.tree.get_child(int(&major)).unwrap();
 
-        if major_node.is_none() {
-            return false;
-        }
-
+        // eg: '1.x'
         if let &"x" = minor {
-            return self.tree.remove_child(int(&major));
+            let minor_prefix = major_node
+                .get_max_child()
+                .and_then(|minor| Some(minor.prefix))
+                .unwrap();
+
+            let patch_prefix = major_node
+                .get_child(minor_prefix)
+                .and_then(|minor| minor.get_max_child())
+                .and_then(|patch| Some(patch.prefix))
+                .unwrap();
+
+            let patch_node = major_node
+                .get_child(minor_prefix)
+                .and_then(|minor| minor.remove_child(patch_prefix));
+
+            self.tree.remove_child(int(&major));
+
+            return patch_node.and_then(|node| node.store);
         }
 
+        // eg: '1.2'
         if patch.is_none() {
-            let major_node = self.tree.get_child(int(&major)).unwrap();
-            if major_node.remove_child(int(&minor)) == false {
-                return false;
-            }
+            let patch_prefix = major_node
+                .get_child(int(&minor))
+                .and_then(|minor| minor.get_max_child())
+                .and_then(|patch| Some(patch.prefix))
+                .unwrap();
 
-            // if we removed the last child, we should
-            // also remove the parent node
+            let patch_node = major_node
+                .get_child(int(&minor))
+                .and_then(|minor| minor.remove_child(patch_prefix));
+
+            major_node.remove_child(int(&minor));
             if major_node.children.len() == 0 {
                 self.tree.remove_child(int(&major));
             }
-            return true;
+
+            return patch_node.and_then(|node| node.store);
         }
 
         let patch = patch.unwrap();
 
-        // TODO: remove code duplication
+        // eg: '1.2.x'
         if let &"x" = patch {
-            let major_node = self.tree.get_child(int(&major)).unwrap();
-            if major_node.remove_child(int(&minor)) == false {
-                return false;
-            }
+            let patch_prefix = major_node
+                .get_child(int(&minor))
+                .and_then(|minor| minor.get_max_child())
+                .and_then(|patch| Some(patch.prefix))
+                .unwrap();
 
-            // if we removed the last child, we should
-            // also remove the parent node
+            let patch_node = major_node
+                .get_child(int(&minor))
+                .and_then(|minor| minor.remove_child(patch_prefix));
+
+            major_node.remove_child(int(&minor));
             if major_node.children.len() == 0 {
                 self.tree.remove_child(int(&major));
             }
-            return true;
+
+            return patch_node.and_then(|node| node.store);
         }
 
-        let removed = self
-            .tree
-            .get_child(int(&major))
-            .and_then(|major| major.get_child(int(&minor)))
-            .and_then(|minor| Some(minor.remove_child(int(&patch))));
+        // eg: '1.2.3'
+        let patch_node = major_node
+            .get_child(int(&minor))
+            .and_then(|minor| minor.remove_child(int(&patch)));
 
-        if removed.is_none() {
-            return false;
-        }
+        let minor_node = major_node.get_child(int(&minor)).unwrap();
 
         // if we removed the last child, we should
         // also remove the parent node
-        let minor_node = self
-            .tree
-            .get_child(int(&major))
-            .and_then(|major| major.get_child(int(&minor)))
-            .unwrap();
-
         if minor_node.children.len() == 0 {
-            self.tree
-                .get_child(int(&major))
-                .unwrap()
-                .remove_child(int(&minor));
+            major_node.remove_child(int(&minor));
         }
-
-        let major_node = self.tree.get_child(int(&major)).unwrap();
         if major_node.children.len() == 0 {
             self.tree.remove_child(int(&major));
         }
 
-        return true;
+        return patch_node.and_then(|node| node.store);
     }
 
     pub fn empty(&mut self) {
