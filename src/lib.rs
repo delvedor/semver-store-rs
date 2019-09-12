@@ -6,12 +6,12 @@ pub struct SemverStore<T> {
 
 impl<T> SemverStore<T> {
     pub fn new() -> Self {
-        SemverStore {
+        Self {
             tree: node::Node::new(0),
         }
     }
 
-    pub fn insert(&mut self, version: &String, store: T) {
+    pub fn insert(&mut self, version: &str, store: T) {
         let semver: Vec<&str> = version.split('.').collect();
         let mut current_node = &mut self.tree;
         for v in semver {
@@ -22,46 +22,46 @@ impl<T> SemverStore<T> {
         current_node.set_store(store);
     }
 
-    pub fn get(&mut self, version: &String) -> Option<&T> {
+    pub fn get(&mut self, version: &str) -> Option<&T> {
         let semver: Vec<&str> = version.split('.').collect();
         let major = semver.get(0).unwrap();
         let minor = semver.get(1).unwrap();
         let patch = semver.get(2).unwrap_or(&"x");
 
-        if let &"x" = minor {
+        if let "x" = *minor {
             return self
                 .tree
-                .get_child(int(&major))
-                .and_then(|major| major.get_max_child())
-                .and_then(|minor| minor.get_max_child())
+                .get_child(&int(&major))
+                .and_then(node::Node::get_max_child)
+                .and_then(node::Node::get_max_child)
                 .and_then(|patch| patch.store.as_ref());
         }
 
-        if let &"x" = patch {
+        if let "x" = *patch {
             return self
                 .tree
-                .get_child(int(&major))
-                .and_then(|major| major.get_child(int(&minor)))
-                .and_then(|minor| minor.get_max_child())
+                .get_child(&int(&major))
+                .and_then(|major| major.get_child(&int(&minor)))
+                .and_then(node::Node::get_max_child)
                 .and_then(|patch| patch.store.as_ref());
         }
 
         self.tree
-            .get_child(int(&major))
-            .and_then(|major| major.get_child(int(&minor)))
-            .and_then(|minor| minor.get_child(int(&patch)))
+            .get_child(&int(&major))
+            .and_then(|major| major.get_child(&int(&minor)))
+            .and_then(|minor| minor.get_child(&int(&patch)))
             .and_then(|patch| patch.store.as_ref())
     }
 
-    pub fn contains_key(&mut self, version: &String) -> bool {
+    pub fn contains_key(&mut self, version: &str) -> bool {
         match self.get(version) {
             Some(_v) => true,
             None => false,
         }
     }
 
-    pub fn remove(&mut self, version: &String) -> Option<T> {
-        if self.contains_key(&version) == false {
+    pub fn remove(&mut self, version: &str) -> Option<T> {
+        if !self.contains_key(&version) {
             return None;
         }
 
@@ -70,23 +70,23 @@ impl<T> SemverStore<T> {
         let minor = semver.get(1).unwrap();
         let patch = semver.get(2).unwrap_or(&"x");
 
-        let major_node = self.tree.get_child(int(&major)).unwrap();
+        let major_node = self.tree.get_child(&int(&major)).unwrap();
 
         // eg: '1.x'
-        if let &"x" = minor {
+        if let "x" = *minor {
             let minor_prefix = major_node
                 .get_max_child()
                 .and_then(|minor| Some(minor.prefix))
                 .unwrap();
 
             let patch_prefix = major_node
-                .get_child(minor_prefix)
-                .and_then(|minor| minor.get_max_child())
+                .get_child(&minor_prefix)
+                .and_then(node::Node::get_max_child)
                 .and_then(|patch| Some(patch.prefix))
                 .unwrap();
 
             let patch_node = major_node
-                .get_child(minor_prefix)
+                .get_child(&minor_prefix)
                 .and_then(|minor| minor.remove_child(patch_prefix));
 
             self.tree.remove_child(int(&major));
@@ -94,10 +94,10 @@ impl<T> SemverStore<T> {
             return patch_node.and_then(|node| node.store);
         }
 
-        let minor_node = major_node.get_child(int(&minor)).unwrap();
+        let minor_node = major_node.get_child(&int(&minor)).unwrap();
 
         // eg: '1.2.x' (or 1.2, since no patch means 'x')
-        if let &"x" = patch {
+        if let "x" = *patch {
             let patch_prefix = minor_node
                 .get_max_child()
                 .and_then(|patch| Some(patch.prefix))
@@ -106,7 +106,7 @@ impl<T> SemverStore<T> {
             let patch_node = minor_node.remove_child(patch_prefix);
 
             major_node.remove_child(int(&minor));
-            if major_node.children.len() == 0 {
+            if major_node.children.is_empty() {
                 self.tree.remove_child(int(&major));
             }
 
@@ -118,14 +118,14 @@ impl<T> SemverStore<T> {
 
         // if we removed the last child, we should
         // also remove the parent node
-        if minor_node.children.len() == 0 {
+        if minor_node.children.is_empty() {
             major_node.remove_child(int(&minor));
         }
-        if major_node.children.len() == 0 {
+        if major_node.children.is_empty() {
             self.tree.remove_child(int(&major));
         }
 
-        return patch_node.and_then(|node| node.store);
+        patch_node.and_then(|node| node.store)
     }
 
     pub fn empty(&mut self) {

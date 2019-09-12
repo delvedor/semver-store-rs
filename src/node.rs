@@ -8,28 +8,26 @@ pub struct Node<T> {
 
 impl<T> Node<T> {
     pub fn new(prefix: u32) -> Self {
-        Node {
+        Self {
             prefix,
             children: HashMap::new(),
             store: None,
         }
     }
 
-    pub fn get_child(&mut self, prefix: u32) -> Option<&mut Node<T>> {
+    pub fn get_child(&mut self, prefix: &u32) -> Option<&mut Node<T>> {
         self.children.get_mut(&prefix)
     }
 
     pub fn add_child(&mut self, node: Node<T>) -> &mut Node<T> {
         let prefix = node.prefix;
-        if self.children.contains_key(&prefix) == false {
-            self.children.insert(prefix, node);
-        }
-        self.get_child(prefix).unwrap()
+        self.children.entry(prefix).or_insert(node);
+        self.get_child(&prefix).unwrap()
     }
 
     pub fn get_max_child(&mut self) -> Option<&mut Node<T>> {
         match self.children.keys().max() {
-            Some(max) => self.get_child(*max),
+            Some(&max) => self.get_child(&max),
             None => None,
         }
     }
@@ -77,7 +75,7 @@ mod node_tests {
         root.add_child(node2);
 
         assert_eq!(root.children.len(), 1);
-        match root.get_child(2) {
+        match root.get_child(&2) {
             Some(child) => assert_eq!(child.store, Some(10)),
             None => panic!("Should have a value"),
         }
@@ -90,7 +88,7 @@ mod node_tests {
         node.set_store(10);
         root.add_child(node);
 
-        match root.get_child(2) {
+        match root.get_child(&2) {
             Some(_c) => assert_eq!(_c.store, Some(10)),
             None => panic!("Should have a value"),
         }
@@ -108,7 +106,7 @@ mod node_tests {
         root.add_child(node1);
 
         let node2 = Node::new(2);
-        let child = root.get_child(1).unwrap();
+        let child = root.get_child(&1).unwrap();
 
         child.add_child(node2);
 
